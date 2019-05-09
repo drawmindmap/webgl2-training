@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebGL training</title>
+</head>
+<body>
+  <script type="module">
+    import files from './js/files.js';
+
+    const html = files.map((fileName) => {
+      const tutorial = fileName.split('.')[0];
+      return `<a href="tutorials/${fileName}">${tutorial}</a>`;
+    }).join('<br>\n');
+    document.body.innerHTML = html;
+  </script>
+</body>
+</html>

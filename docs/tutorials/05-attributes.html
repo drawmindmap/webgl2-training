@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <title>WebGL training - Attributes</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import { GUI } from '../js/libs/dat.gui.module.js';
+    import {
+      toHighDPI,
+      createProgram,
+      createBuffer,
+      bindDataBuffer,
+    } from '../js/bundle.js';
+
+    const config = {
+      clearColor: [0, 0, 0],
+      color: [255, 255, 255],
+    };
+    const canvas = document.getElementById('canvas');
+    // 01: create WebGL context
+    const gl = canvas.getContext('webgl2');
+    // 02.1: create program from shader source
+    const program = createProgram(gl, `#version 300 es
+      precision highp float;
+
+      in vec2 a_position;
+      in vec3 a_color;
+      out vec3 v_color;
+
+      void main () {
+        gl_Position = vec4(a_position - 0.5, 0.0, 1.0);
+        v_color = a_color;
+      }
+    `, `#version 300 es
+      precision highp float;
+
+      uniform vec3 u_color;
+      in vec3 v_color;
+      out vec4 fragColor;
+
+      void main () {
+        fragColor = vec4(v_color * u_color, 1.0);
+      }
+    `);
+    // 02.2: get uniform locations
+    const colorUniform = gl.getUniformLocation(program, 'u_color');
+    // 02.3: get attribute locations
+    const positionAttrib = gl.getAttribLocation(program, 'a_position');
+    const colorAttrib = gl.getAttribLocation(program, 'a_color');
+
+    // 03.1: create position buffer
+    const positionBuffer = createBuffer(gl, gl.ARRAY_BUFFER, new Float32Array([
+      0, 0,
+      1, 0,
+      0, 1,
+    ]));
+    // 03.2: create color buffer
+    const colorBuffer = createBuffer(gl, gl.ARRAY_BUFFER, new Float32Array([
+      1, 0, 0,
+      1, 1, 1,
+      1, 1, 1,
+    ]));
+
+    function render() {
+      // 04: clean canvas before drawing
+      gl.clearColor(
+        config.clearColor[0] / 255,
+        config.clearColor[1] / 255,
+        config.clearColor[2] / 255,
+        1,
+      );
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // 05.1: use program
+      gl.useProgram(program);
+      // 05.2: set uniform values for program
+      gl.uniform3f(
+        colorUniform,
+        config.color[0] / 255,
+        config.color[1] / 255,
+        config.color[2] / 255,
+      );
+
+      // 06.1: link position buffer to attribute a_position
+      bindDataBuffer(gl, positionBuffer, positionAttrib, 2, gl.FLOAT, 0, 0);
+      // 06.2: link color buffer to attribute a_color
+      bindDataBuffer(gl, colorBuffer, colorAttrib, 3, gl.FLOAT, 0, 0);
+
+      // 07: draw triangles
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      gl.useProgram(null);
+    }
+
+    // handle resize
+    function resize() {
+      const { clientWidth, clientHeight } = document.documentElement;
+      canvas.width = clientWidth;
+      canvas.height = clientHeight;
+      // handle high DPI screen
+      toHighDPI(canvas);
+      // set viewport
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      render();
+    }
+
+    window.onresize = resize;
+    resize();
+
+    // config
+    const gui = new GUI();
+    gui.addColor(config, 'clearColor').onChange(() => {
+      render();
+    });
+    gui.addColor(config, 'color').onChange(() => {
+      render();
+    });
+  </script>
+</body>
+</html>

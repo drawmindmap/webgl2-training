@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <title>WebGL training - Uniform</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import { GUI } from '../js/libs/dat.gui.module.js';
+    import {
+      toHighDPI,
+      createProgram,
+    } from '../js/bundle.js';
+
+    const config = {
+      clearColor: [0, 0, 0],
+      color: [255, 255, 255],
+    };
+    const canvas = document.getElementById('canvas');
+    // 01: create WebGL context
+    const gl = canvas.getContext('webgl2');
+    // 02.1: create program from shader source
+    const program = createProgram(gl, `#version 300 es
+      precision highp float;
+
+      void main () {
+        int x = gl_VertexID % 2;
+        int y = gl_VertexID / 2;
+        gl_Position = vec4(vec2(x, y) - 0.5, 0, 1);
+      }
+    `, `#version 300 es
+      precision highp float;
+
+      uniform vec3 u_color;
+      out vec4 fragColor;
+
+      void main () {
+        fragColor = vec4(u_color, 1.0);
+      }
+    `);
+    // 02.2: get uniform locations
+    const colorUniform = gl.getUniformLocation(program, 'u_color');
+
+    function render() {
+      // 03: clean canvas before drawing
+      gl.clearColor(
+        config.clearColor[0] / 255,
+        config.clearColor[1] / 255,
+        config.clearColor[2] / 255,
+        1,
+      );
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // 04.1: use program
+      gl.useProgram(program);
+      // 04.2: set uniform values for program
+      gl.uniform3f(
+        colorUniform,
+        config.color[0] / 255,
+        config.color[1] / 255,
+        config.color[2] / 255,
+      );
+
+      // 05: draw triangles
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      gl.useProgram(null);
+    }
+
+    // handle resize
+    function resize() {
+      const { clientWidth, clientHeight } = document.documentElement;
+      canvas.width = clientWidth;
+      canvas.height = clientHeight;
+      // handle high DPI screen
+      toHighDPI(canvas);
+      // set viewport
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      render();
+    }
+
+    window.onresize = resize;
+    resize();
+
+    // config
+    const gui = new GUI();
+    gui.addColor(config, 'clearColor').onChange(() => {
+      render();
+    });
+    gui.addColor(config, 'color').onChange(() => {
+      render();
+    });
+  </script>
+</body>
+</html>

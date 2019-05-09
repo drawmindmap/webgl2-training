@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <title>WebGL training - Setup</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import { GUI } from '../js/libs/dat.gui.module.js';
+    import {
+      toHighDPI,
+    } from '../js/bundle.js';
+
+    const config = {
+      clearColor: [0, 0, 0],
+    };
+    const canvas = document.getElementById('canvas');
+    // 01: create WebGL context
+    const gl = canvas.getContext('webgl2');
+
+    function render() {
+      // 02: clean canvas before drawing
+      gl.clearColor(
+        config.clearColor[0] / 255,
+        config.clearColor[1] / 255,
+        config.clearColor[2] / 255,
+        1,
+      );
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+
+    // handle resize
+    function resize() {
+      const { clientWidth, clientHeight } = document.documentElement;
+      canvas.width = clientWidth;
+      canvas.height = clientHeight;
+      // handle high DPI screen
+      toHighDPI(canvas);
+      // set viewport
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      render();
+    }
+
+    window.onresize = resize;
+    resize();
+
+    // config
+    const gui = new GUI();
+    gui.addColor(config, 'clearColor').onChange(() => {
+      render();
+    });
+  </script>
+</body>
+</html>

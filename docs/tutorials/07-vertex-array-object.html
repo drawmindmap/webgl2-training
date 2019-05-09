@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <title>WebGL training - Vertex Array Object</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import { GUI } from '../js/libs/dat.gui.module.js';
+    import {
+      toHighDPI,
+      createProgram,
+      createVertexArray,
+    } from '../js/bundle.js';
+
+    const config = {
+      clearColor: [0, 0, 0],
+    };
+    const meshes = [
+      {
+        geometry: {
+          position: {
+            data: new Float32Array([
+              0, 0,
+              1, 0,
+              0, 1,
+            ]),
+            size: 2,
+          },
+          color: {
+            data: new Float32Array([
+              1, 0, 0,
+              1, 1, 1,
+              1, 1, 1,
+            ]),
+          },
+        },
+        material: {
+          color: [255, 255, 255],
+        },
+      },
+      {
+        geometry: {
+          position: {
+            data: new Float32Array([
+              1, 1,
+              1, 0,
+              0, 1,
+            ]),
+            size: 2,
+          },
+          color: {
+            data: new Float32Array([
+              0, 0, 1,
+              1, 1, 1,
+              1, 1, 1,
+            ]),
+          },
+        },
+        material: {
+          color: [255, 255, 255],
+        },
+      },
+    ];
+    const canvas = document.getElementById('canvas');
+    // 01: create WebGL context
+    const gl = canvas.getContext('webgl2');
+    // 02.1: create program from shader source
+    const program = createProgram(gl, `#version 300 es
+      precision highp float;
+
+      layout(location = 0) in vec2 a_position;
+      layout(location = 1) in vec3 a_color;
+      out vec3 v_color;
+
+      void main () {
+        gl_Position = vec4(a_position - 0.5, 0.0, 1.0);
+        v_color = a_color;
+      }
+    `, `#version 300 es
+      precision highp float;
+
+      uniform vec3 u_color;
+      in vec3 v_color;
+      out vec4 fragColor;
+
+      void main () {
+        fragColor = vec4(v_color * u_color, 1.0);
+      }
+    `);
+    // 02.2: get uniform locations
+    const colorUniform = gl.getUniformLocation(program, 'u_color');
+
+    meshes.forEach((mesh) => {
+      // 03: create vao
+      mesh.vao = createVertexArray(gl, mesh.geometry);
+    });
+
+    function render() {
+      // 04: clean canvas before drawing
+      gl.clearColor(
+        config.clearColor[0] / 255,
+        config.clearColor[1] / 255,
+        config.clearColor[2] / 255,
+        1,
+      );
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // 05.1: use program
+      gl.useProgram(program);
+
+      meshes.forEach((mesh) => {
+        // 05.2: set uniform values for program
+        gl.uniform3f(
+          colorUniform,
+          mesh.material.color[0] / 255,
+          mesh.material.color[1] / 255,
+          mesh.material.color[2] / 255,
+        );
+
+        // 06: bind vao
+        gl.bindVertexArray(mesh.vao);
+
+        // 07: draw triangles
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      });
+
+      gl.useProgram(null);
+    }
+
+    // handle resize
+    function resize() {
+      const { clientWidth, clientHeight } = document.documentElement;
+      canvas.width = clientWidth;
+      canvas.height = clientHeight;
+      // handle high DPI screen
+      toHighDPI(canvas);
+      // set viewport
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      render();
+    }
+
+    window.onresize = resize;
+    resize();
+
+    // config
+    const gui = new GUI();
+    gui.addColor(config, 'clearColor').onChange(() => {
+      render();
+    });
+    gui.addColor(meshes[0].material, 'color').onChange(() => {
+      render();
+    }).name('color0');
+    gui.addColor(meshes[1].material, 'color').onChange(() => {
+      render();
+    }).name('color1');
+  </script>
+</body>
+</html>
