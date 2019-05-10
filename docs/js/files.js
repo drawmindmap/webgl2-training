@@ -10,4 +10,5 @@ export default [
   '09-texture.html',
   '10-model-matrix.html',
   '11-projection-matrix.html',
+  '12-view-matrix.html',
 ];

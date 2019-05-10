@@ -8,7 +8,7 @@
       height: 100%;
     }
   </style>
-  <title>WebGL training - Projection Matrix</title>
+  <title>WebGL training - View Matrix</title>
 </head>
 <body>
   <canvas id="canvas"></canvas>
@@ -35,7 +35,17 @@
       fovy: 45,
       near: 0.1,
       far: 100,
+      eyeX: 0,
+      eyeY: 0,
+      eyeZ: 4,
+      centerX: 0,
+      centerY: 0,
+      centerZ: 0,
+      eye: vec3.create(),
+      center: vec3.create(),
+      up: vec3.fromValues(0, 1, 0),
     };
+    const viewMatrix = mat4.create();
     const projectionMatrix = mat4.create();
     const meshes = [
       {
@@ -97,13 +107,14 @@
       layout(location = 1) in vec3 a_color;
       layout(location = 2) in vec2 a_uv;
       uniform mat4 u_modelMatrix;
+      uniform mat4 u_viewMatrix;
       uniform mat4 u_projectionMatrix;
       out vec3 v_color;
       out vec2 v_uv;
 
       void main () {
         vec4 position = vec4(a_position, 0.0, 1.0);
-        position = u_projectionMatrix * u_modelMatrix * position;
+        position = u_projectionMatrix * u_viewMatrix * u_modelMatrix * position;
         gl_Position = position;
         v_color = a_color;
         v_uv = vec2(a_uv.x, 1.0 - a_uv.y);
@@ -124,6 +135,7 @@
     `);
     // 02.2: get uniform locations
     const modelMatrixUniform = gl.getUniformLocation(program, 'u_modelMatrix');
+    const viewMatrixUniform = gl.getUniformLocation(program, 'u_viewMatrix');
     const projectionMatrixUniform = gl.getUniformLocation(program, 'u_projectionMatrix');
     const colorUniform = gl.getUniformLocation(program, 'u_color');
     const textureUniform = gl.getUniformLocation(program, 'u_texture');
@@ -149,7 +161,12 @@
       // 06: use program
       gl.useProgram(program);
 
-      // 07: set projection matrix
+      // 07.1: set view matrix
+      vec3.set(camera.eye, camera.eyeX, camera.eyeY, camera.eyeZ);
+      vec3.set(camera.center, camera.centerX, camera.centerY, camera.centerZ);
+      mat4.lookAt(viewMatrix, camera.eye, camera.center, camera.up);
+      gl.uniformMatrix4fv(viewMatrixUniform, false, viewMatrix);
+      // 07.2: set projection matrix
       mat4.perspective(
         projectionMatrix,
         toRadians(camera.fovy),
@@ -220,7 +237,7 @@
     gui.addColor(mesh.material, 'color').onChange(() => {
       render();
     });
-    const setMatrix = () => {
+    const setModelMatrix = () => {
       vec3.set(mesh.translate, mesh.tx, mesh.ty, mesh.tz);
       vec3.set(mesh.scale, mesh.sx, mesh.sy, mesh.sz);
       quat.fromEuler(mesh.quat, mesh.rx, mesh.ry, mesh.rz);
@@ -229,31 +246,31 @@
     };
     const modelFolder = gui.addFolder('Model Matrix');
     modelFolder.add(mesh, 'tx', -2, 2, 0.1).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     modelFolder.add(mesh, 'ty', -2, 2, 0.1).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     modelFolder.add(mesh, 'tz', -2, 2, 0.1).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     modelFolder.add(mesh, 'sx', 0, 2, 0.1).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     modelFolder.add(mesh, 'sy', 0, 2, 0.1).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     modelFolder.add(mesh, 'sz', 0, 2, 0.1).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     modelFolder.add(mesh, 'rx', -360, 360, 10).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     modelFolder.add(mesh, 'ry', -360, 360, 10).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     modelFolder.add(mesh, 'rz', -360, 360, 10).onChange(() => {
-      setMatrix();
+      setModelMatrix();
     });
     const projectionFolder = gui.addFolder('Camera');
     projectionFolder.add(camera, 'fovy', 0, 180, 1).onChange(() => {
@@ -264,6 +281,27 @@
     });
     projectionFolder.add(camera, 'far', 10, 1000, 1).onChange(() => {
       render();
+    });
+    const setViewMatrix = () => {
+      render();
+    };
+    projectionFolder.add(camera, 'eyeX', -100, 100, 1).onChange(() => {
+      setViewMatrix();
+    });
+    projectionFolder.add(camera, 'eyeY', -100, 100, 1).onChange(() => {
+      setViewMatrix();
+    });
+    projectionFolder.add(camera, 'eyeZ', -100, 100, 1).onChange(() => {
+      setViewMatrix();
+    });
+    projectionFolder.add(camera, 'centerX', -100, 100, 1).onChange(() => {
+      setViewMatrix();
+    });
+    projectionFolder.add(camera, 'centerY', -100, 100, 1).onChange(() => {
+      setViewMatrix();
+    });
+    projectionFolder.add(camera, 'centerZ', -100, 100, 1).onChange(() => {
+      setViewMatrix();
     });
   </script>
 </body>
