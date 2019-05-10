@@ -16,19 +16,34 @@ export function bindDataBuffer(gl, buffer, index, size, type, stride, offset) {
 export function createVertexArray(gl, geometry) {
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
-  Object.keys(geometry).forEach((attribute, i) => {
-    const geometryData = geometry[attribute];
-    const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometryData.data);
-    bindDataBuffer(
-      gl,
-      buffer,
-      i,
-      geometryData.size,
-      geometryData.type,
-      geometryData.stride,
-      geometryData.offset,
-    );
-  });
+  if (geometry.length) {
+    geometry.forEach((geometryData, i) => {
+      const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometryData.data);
+      bindDataBuffer(
+        gl,
+        buffer,
+        geometryData.index || i,
+        geometryData.size,
+        geometryData.type,
+        geometryData.stride,
+        geometryData.offset,
+      );
+    });
+  } else {
+    const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometry.data);
+    geometry.attributes.forEach((attribute, i) => {
+      bindDataBuffer(
+        gl,
+        buffer,
+        attribute.index || i,
+        attribute.size,
+        geometry.type,
+        geometry.stride,
+        attribute.offset,
+      );
+    });
+    geometry.count = geometry.data.byteLength / geometry.stride;
+  }
   gl.bindVertexArray(null);
   return vao;
 }

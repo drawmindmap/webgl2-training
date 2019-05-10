@@ -6,4 +6,6 @@ export default [
   '05-attributes.html',
   '06-two-triangles.html',
   '07-vertex-array-object.html',
+  '08-interleaved-buffer.html',
+  '09-texture.html',
 ];
