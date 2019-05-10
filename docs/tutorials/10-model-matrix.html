@@ -8,30 +8,42 @@
       height: 100%;
     }
   </style>
-  <title>WebGL training - Interleaved Buffer</title>
+  <title>WebGL training - Texture</title>
 </head>
 <body>
   <canvas id="canvas"></canvas>
   <script type="module">
     import { GUI } from '../js/libs/dat.gui.module.js';
     import {
+      vec3,
+      mat4,
+    } from '../js/libs/gl-matrix.js';
+    import {
       toHighDPI,
       createProgram,
       createVertexArray,
+      createTexture,
     } from '../js/bundle.js';
 
+    let ready = false;
     const config = {
       clearColor: [0, 0, 0],
+      sx: 0.5,
+      sy: 0.5,
+      sz: 0.5,
     };
     const meshes = [
       {
         geometry: {
           data: new Float32Array([
-            0, 0, 1, 0, 0,
-            1, 0, 1, 1, 1,
-            0, 1, 1, 1, 1,
+            -1, -1, 1, 0, 0, 0, 0,
+            1, -1, 1, 1, 1, 1, 0,
+            -1, 1, 1, 1, 1, 0, 1,
+            1, 1, 0, 0, 1, 1, 1,
+            1, -1, 1, 1, 1, 1, 0,
+            -1, 1, 1, 1, 1, 0, 1,
           ]),
-          stride: 5 * 4,
+          stride: 7 * 4,
           attributes: [
             {
               index: 0,
@@ -43,36 +55,18 @@
               size: 3,
               offset: 2 * 4,
             },
-          ],
-        },
-        material: {
-          color: [255, 255, 255],
-        },
-      },
-      {
-        geometry: {
-          data: new Float32Array([
-            1, 1, 0, 0, 1,
-            1, 0, 1, 1, 1,
-            0, 1, 1, 1, 1,
-          ]),
-          stride: 5 * 4,
-          attributes: [
             {
-              index: 0,
+              index: 2,
               size: 2,
-              offset: 0,
-            },
-            {
-              index: 1,
-              size: 3,
-              offset: 2 * 4,
+              offset: 5 * 4,
             },
           ],
         },
         material: {
           color: [255, 255, 255],
+          image: '../asset/images/crate.gif',
         },
+        matrix: mat4.fromScaling(mat4.create(), vec3.fromValues(0.5, 0.5, 0.5)),
       },
     ];
     const canvas = document.getElementById('canvas');
@@ -84,25 +78,36 @@
 
       layout(location = 0) in vec2 a_position;
       layout(location = 1) in vec3 a_color;
+      layout(location = 2) in vec2 a_uv;
+      uniform mat4 u_modelMatrix;
       out vec3 v_color;
+      out vec2 v_uv;
 
       void main () {
-        gl_Position = vec4(a_position - 0.5, 0.0, 1.0);
+        vec4 position = vec4(a_position, 0.0, 1.0);
+        position = u_modelMatrix * position;
+        gl_Position = position;
         v_color = a_color;
+        v_uv = vec2(a_uv.x, 1.0 - a_uv.y);
       }
     `, `#version 300 es
       precision highp float;
 
       uniform vec3 u_color;
+      uniform sampler2D u_texture;
       in vec3 v_color;
+      in vec2 v_uv;
       out vec4 fragColor;
 
       void main () {
-        fragColor = vec4(v_color * u_color, 1.0);
+        vec4 color = texture(u_texture, v_uv);
+        fragColor = vec4(color.rgb * v_color * u_color, 1.0);
       }
     `);
     // 02.2: get uniform locations
+    const modelMatrixUniform = gl.getUniformLocation(program, 'u_modelMatrix');
     const colorUniform = gl.getUniformLocation(program, 'u_color');
+    const textureUniform = gl.getUniformLocation(program, 'u_texture');
 
     meshes.forEach((mesh) => {
       // 03: create vao
@@ -110,7 +115,10 @@
     });
 
     function render() {
-      // 04: clean canvas before drawing
+      if (!ready) {
+        return;
+      }
+      // 05: clean canvas before drawing
       gl.clearColor(
         config.clearColor[0] / 255,
         config.clearColor[1] / 255,
@@ -119,22 +127,30 @@
       );
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      // 05: use program
+      // 06: use program
       gl.useProgram(program);
 
       meshes.forEach((mesh) => {
-        // 06: set color uniform
+        // 07.1: set color uniform
         gl.uniform3f(
           colorUniform,
           mesh.material.color[0] / 255,
           mesh.material.color[1] / 255,
           mesh.material.color[2] / 255,
         );
+        // 07.2: set texture uniform
+        gl.uniform1i(textureUniform, 0);
+        // 07.3: set model matrix uniform
+        gl.uniformMatrix4fv(modelMatrixUniform, false, mesh.matrix);
 
-        // 07: bind vao
+        // 08: bind texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, mesh.material.texture);
+
+        // 09: bind vao
         gl.bindVertexArray(mesh.vao);
 
-        // 08: draw triangles
+        // 10: draw triangles
         gl.drawArrays(gl.TRIANGLES, 0, mesh.geometry.count);
       });
 
@@ -156,6 +172,16 @@
     window.onresize = resize;
     resize();
 
+    // 04: create texture
+    (async () => {
+      const textures = await Promise.all(meshes.map(mesh => createTexture(gl, mesh.material.image)));
+      textures.forEach((texture, i) => {
+        meshes[i].material.texture = texture;
+      });
+      ready = true;
+      render();
+    })();
+
     // config
     const gui = new GUI();
     gui.addColor(config, 'clearColor').onChange(() => {
@@ -163,10 +189,24 @@
     });
     gui.addColor(meshes[0].material, 'color').onChange(() => {
       render();
-    }).name('color0');
-    gui.addColor(meshes[1].material, 'color').onChange(() => {
+    }).name('color');
+    const scale = vec3.create();
+    const setScale = () => {
+      scale[0] = config.sx;
+      scale[1] = config.sy;
+      scale[2] = config.sz;
+      mat4.fromScaling(meshes[0].matrix, scale);
       render();
-    }).name('color1');
+    };
+    gui.add(config, 'sx', 0, 2, 0.1).onChange(() => {
+      setScale();
+    }).name('sx');
+    gui.add(config, 'sy', 0, 2, 0.1).onChange(() => {
+      setScale();
+    }).name('sy');
+    gui.add(config, 'sz', 0, 2, 0.1).onChange(() => {
+      setScale();
+    }).name('sz');
   </script>
 </body>
 </html>

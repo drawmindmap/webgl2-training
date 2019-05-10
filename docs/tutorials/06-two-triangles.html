@@ -2,8 +2,10 @@
 <html>
 <head>
   <style>
-    body {
+    html, body {
       margin: 0;
+      overflow: hidden;
+      height: 100%;
     }
   </style>
   <title>WebGL training - Two triangles</title>
@@ -114,11 +116,11 @@
       );
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      // 05.1: use program
+      // 05: use program
       gl.useProgram(program);
 
       meshes.forEach((mesh) => {
-        // 05.2: set uniform values for program
+        // 06: set color uniform
         gl.uniform3f(
           colorUniform,
           mesh.material.color[0] / 255,
@@ -126,7 +128,7 @@
           mesh.material.color[2] / 255,
         );
 
-        // 06: link buffer to attribute
+        // 07: link buffer to attribute
         Object.keys(mesh.geometry).forEach((attribute, i) => {
           const geometryData = mesh.geometry[attribute];
           bindDataBuffer(
@@ -140,7 +142,7 @@
           );
         });
 
-        // 07: draw triangles
+        // 08: draw triangles
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       });
 

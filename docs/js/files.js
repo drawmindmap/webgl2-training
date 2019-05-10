@@ -8,4 +8,5 @@ export default [
   '07-vertex-array-object.html',
   '08-interleaved-buffer.html',
   '09-texture.html',
+  '10-model-matrix.html',
 ];

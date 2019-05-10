@@ -2,8 +2,10 @@
 <html>
 <head>
   <style>
-    body {
+    html, body {
       margin: 0;
+      overflow: hidden;
+      height: 100%;
     }
   </style>
   <title>WebGL training - Attributes</title>
@@ -78,9 +80,9 @@
       );
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      // 05.1: use program
+      // 05: use program
       gl.useProgram(program);
-      // 05.2: set uniform values for program
+      // 06: set color uniform
       gl.uniform3f(
         colorUniform,
         config.color[0] / 255,
@@ -88,12 +90,12 @@
         config.color[2] / 255,
       );
 
-      // 06.1: link position buffer to attribute a_position
+      // 07.1: link position buffer to attribute a_position
       bindDataBuffer(gl, positionBuffer, positionAttrib, 2, gl.FLOAT, 0, 0);
-      // 06.2: link color buffer to attribute a_color
+      // 07.2: link color buffer to attribute a_color
       bindDataBuffer(gl, colorBuffer, colorAttrib, 3, gl.FLOAT, 0, 0);
 
-      // 07: draw triangles
+      // 08: draw triangles
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       gl.useProgram(null);

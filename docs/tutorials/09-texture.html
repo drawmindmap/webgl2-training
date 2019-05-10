@@ -115,28 +115,28 @@
       );
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      // 06.1: use program
+      // 06: use program
       gl.useProgram(program);
 
       meshes.forEach((mesh) => {
-        // 06.2: set uniform values for program
+        // 07.1: set color uniform
         gl.uniform3f(
           colorUniform,
           mesh.material.color[0] / 255,
           mesh.material.color[1] / 255,
           mesh.material.color[2] / 255,
         );
-        // 06.3: set uniform texture
+        // 07.2: set texture uniform
         gl.uniform1i(textureUniform, 0);
 
-        // 07: bind texture
+        // 08: bind texture
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, mesh.material.texture);
 
-        // 08: bind vao
+        // 09: bind vao
         gl.bindVertexArray(mesh.vao);
 
-        // 09: draw triangles
+        // 10: draw triangles
         gl.drawArrays(gl.TRIANGLES, 0, mesh.geometry.count);
       });
 
