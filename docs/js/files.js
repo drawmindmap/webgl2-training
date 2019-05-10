@@ -9,4 +9,5 @@ export default [
   '08-interleaved-buffer.html',
   '09-texture.html',
   '10-model-matrix.html',
+  '11-projection-matrix.html',
 ];

@@ -8,7 +8,7 @@
       height: 100%;
     }
   </style>
-  <title>WebGL training - Model Matrix</title>
+  <title>WebGL training - Projection Matrix</title>
 </head>
 <body>
   <canvas id="canvas"></canvas>
@@ -21,6 +21,7 @@
     } from '../js/libs/gl-matrix.js';
     import {
       toHighDPI,
+      toRadians,
       createProgram,
       createVertexArray,
       createTexture,
@@ -30,6 +31,12 @@
     const config = {
       clearColor: [0, 0, 0],
     };
+    const camera = {
+      fovy: 45,
+      near: 0.1,
+      far: 100,
+    };
+    const projectionMatrix = mat4.create();
     const meshes = [
       {
         geometry: {
@@ -90,12 +97,13 @@
       layout(location = 1) in vec3 a_color;
       layout(location = 2) in vec2 a_uv;
       uniform mat4 u_modelMatrix;
+      uniform mat4 u_projectionMatrix;
       out vec3 v_color;
       out vec2 v_uv;
 
       void main () {
         vec4 position = vec4(a_position, 0.0, 1.0);
-        position = u_modelMatrix * position;
+        position = u_projectionMatrix * u_modelMatrix * position;
         gl_Position = position;
         v_color = a_color;
         v_uv = vec2(a_uv.x, 1.0 - a_uv.y);
@@ -116,6 +124,7 @@
     `);
     // 02.2: get uniform locations
     const modelMatrixUniform = gl.getUniformLocation(program, 'u_modelMatrix');
+    const projectionMatrixUniform = gl.getUniformLocation(program, 'u_projectionMatrix');
     const colorUniform = gl.getUniformLocation(program, 'u_color');
     const textureUniform = gl.getUniformLocation(program, 'u_texture');
 
@@ -139,6 +148,16 @@
 
       // 06: use program
       gl.useProgram(program);
+
+      // 07: set projection matrix
+      mat4.perspective(
+        projectionMatrix,
+        toRadians(camera.fovy),
+        gl.canvas.clientWidth / gl.canvas.clientHeight,
+        camera.near,
+        camera.far,
+      );
+      gl.uniformMatrix4fv(projectionMatrixUniform, false, projectionMatrix);
 
       meshes.forEach((mesh) => {
         // 07.1: set color uniform
@@ -235,6 +254,16 @@
     });
     modelFolder.add(mesh, 'rz', -360, 360, 10).onChange(() => {
       setMatrix();
+    });
+    const projectionFolder = gui.addFolder('Camera');
+    projectionFolder.add(camera, 'fovy', 0, 180, 1).onChange(() => {
+      render();
+    });
+    projectionFolder.add(camera, 'near', 0, 1, 0.1).onChange(() => {
+      render();
+    });
+    projectionFolder.add(camera, 'far', 10, 1000, 1).onChange(() => {
+      render();
     });
   </script>
 </body>
