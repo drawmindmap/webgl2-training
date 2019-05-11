@@ -11,4 +11,5 @@ export default [
   '10-model-matrix.html',
   '11-projection-matrix.html',
   '12-view-matrix.html',
+  '13-camera.html',
 ];

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    html, body {
+      margin: 0;
+      overflow: hidden;
+      height: 100%;
+    }
+  </style>
+  <title>WebGL training - Camera</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import { GUI } from '../js/libs/dat.gui.module.js';
+    import {
+      vec3,
+      quat,
+      mat4,
+    } from '../js/libs/gl-matrix.js';
+    import {
+      toHighDPI,
+      toRadians,
+      createProgram,
+      createVertexArray,
+      createTexture,
+      CameraControl,
+    } from '../js/bundle.js';
+
+    let ready = false;
+    const config = {
+      clearColor: [0, 0, 0],
+    };
+    const camera = {
+      fovy: 45,
+      near: 0.1,
+      far: 100,
+      eyeX: 0,
+      eyeY: 0,
+      eyeZ: 4,
+      centerX: 0,
+      centerY: 0,
+      centerZ: 0,
+      eye: vec3.create(),
+      center: vec3.create(),
+      up: vec3.fromValues(0, 1, 0),
+      rx: 0,
+      ry: 0,
+      maxy: Math.PI / 180 * 89,
+    };
+    const viewMatrix = mat4.create();
+    const projectionMatrix = mat4.create();
+    const meshes = [
+      {
+        geometry: {
+          data: new Float32Array([
+            -1, -1, 1, 0, 0, 0, 0,
+            1, -1, 1, 1, 1, 1, 0,
+            -1, 1, 1, 1, 1, 0, 1,
+            1, 1, 0, 0, 1, 1, 1,
+            1, -1, 1, 1, 1, 1, 0,
+            -1, 1, 1, 1, 1, 0, 1,
+          ]),
+          stride: 7 * 4,
+          attributes: [
+            {
+              index: 0,
+              size: 2,
+              offset: 0,
+            },
+            {
+              index: 1,
+              size: 3,
+              offset: 2 * 4,
+            },
+            {
+              index: 2,
+              size: 2,
+              offset: 5 * 4,
+            },
+          ],
+        },
+        material: {
+          color: [255, 255, 255],
+          image: '../asset/images/crate.gif',
+        },
+        tx: 0.0,
+        ty: 0.0,
+        tz: 0.0,
+        sx: 1.0,
+        sy: 1.0,
+        sz: 1.0,
+        rx: 0.0,
+        ry: 0.0,
+        rz: 0.0,
+        translate: vec3.create(),
+        scale: vec3.create(),
+        quat: quat.create(),
+        matrix: mat4.create(),
+      },
+    ];
+    const canvas = document.getElementById('canvas');
+    // 01: create WebGL context
+    const gl = canvas.getContext('webgl2');
+    // 02.1: create program from shader source
+    const program = createProgram(gl, `#version 300 es
+      precision highp float;
+
+      layout(location = 0) in vec2 a_position;
+      layout(location = 1) in vec3 a_color;
+      layout(location = 2) in vec2 a_uv;
+      uniform mat4 u_modelMatrix;
+      uniform mat4 u_viewMatrix;
+      uniform mat4 u_projectionMatrix;
+      out vec3 v_color;
+      out vec2 v_uv;
+
+      void main () {
+        vec4 position = vec4(a_position, 0.0, 1.0);
+        position = u_projectionMatrix * u_viewMatrix * u_modelMatrix * position;
+        gl_Position = position;
+        v_color = a_color;
+        v_uv = vec2(a_uv.x, 1.0 - a_uv.y);
+      }
+    `, `#version 300 es
+      precision highp float;
+
+      uniform vec3 u_color;
+      uniform sampler2D u_texture;
+      in vec3 v_color;
+      in vec2 v_uv;
+      out vec4 fragColor;
+
+      void main () {
+        vec4 color = texture(u_texture, v_uv);
+        fragColor = vec4(color.rgb * v_color * u_color, 1.0);
+      }
+    `);
+    // 02.2: get uniform locations
+    const modelMatrixUniform = gl.getUniformLocation(program, 'u_modelMatrix');
+    const viewMatrixUniform = gl.getUniformLocation(program, 'u_viewMatrix');
+    const projectionMatrixUniform = gl.getUniformLocation(program, 'u_projectionMatrix');
+    const colorUniform = gl.getUniformLocation(program, 'u_color');
+    const textureUniform = gl.getUniformLocation(program, 'u_texture');
+
+    meshes.forEach((mesh) => {
+      // 03: create vao
+      mesh.vao = createVertexArray(gl, mesh.geometry);
+    });
+
+    function render() {
+      if (!ready) {
+        return;
+      }
+      // 05: clean canvas before drawing
+      gl.clearColor(
+        config.clearColor[0] / 255,
+        config.clearColor[1] / 255,
+        config.clearColor[2] / 255,
+        1,
+      );
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // 06: use program
+      gl.useProgram(program);
+
+      // 07.1: set view matrix
+      vec3.set(camera.eye, camera.eyeX, camera.eyeY, camera.eyeZ);
+      vec3.set(camera.center, camera.centerX, camera.centerY, camera.centerZ);
+      mat4.lookAt(viewMatrix, camera.eye, camera.center, camera.up);
+      gl.uniformMatrix4fv(viewMatrixUniform, false, viewMatrix);
+      // 07.2: set projection matrix
+      mat4.perspective(
+        projectionMatrix,
+        toRadians(camera.fovy),
+        gl.canvas.clientWidth / gl.canvas.clientHeight,
+        camera.near,
+        camera.far,
+      );
+      gl.uniformMatrix4fv(projectionMatrixUniform, false, projectionMatrix);
+
+      meshes.forEach((mesh) => {
+        // 08.1: set color uniform
+        gl.uniform3f(
+          colorUniform,
+          mesh.material.color[0] / 255,
+          mesh.material.color[1] / 255,
+          mesh.material.color[2] / 255,
+        );
+        // 08.2: set texture uniform
+        gl.uniform1i(textureUniform, 0);
+        // 08.3: set model matrix uniform
+        gl.uniformMatrix4fv(modelMatrixUniform, false, mesh.matrix);
+
+        // 09: bind texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, mesh.material.texture);
+
+        // 10: bind vao
+        gl.bindVertexArray(mesh.vao);
+
+        // 11: draw triangles
+        gl.drawArrays(gl.TRIANGLES, 0, mesh.geometry.count);
+      });
+
+      gl.useProgram(null);
+    }
+
+    // handle resize
+    function resize() {
+      const { clientWidth, clientHeight } = document.documentElement;
+      canvas.width = clientWidth;
+      canvas.height = clientHeight;
+      // handle high DPI screen
+      toHighDPI(canvas);
+      // set viewport
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      render();
+    }
+
+    window.onresize = resize;
+    resize();
+
+    // 04: create texture
+    (async () => {
+      const textures = await Promise.all(meshes.map(mesh => createTexture(gl, mesh.material.image)));
+      textures.forEach((texture, i) => {
+        meshes[i].material.texture = texture;
+      });
+      ready = true;
+      render();
+    })();
+
+    // setup camera control
+    const cameraControl = new CameraControl();
+    cameraControl.attach(canvas);
+    cameraControl.onZoom = (scale) => {
+      vec3.lerp(camera.eye, camera.center, camera.eye, scale);
+      [camera.eyeX, camera.eyeY, camera.eyeZ] = camera.eye;
+      config.eyeXController.updateDisplay();
+      config.eyeYController.updateDisplay();
+      config.eyeZController.updateDisplay();
+      render();
+    };
+    const cameraZ = vec3.create();
+    const cameraX = vec3.create();
+    const cameraY = vec3.create();
+    // http://learnwebgl.brown37.net/07_cameras/camera_linear_motion.html
+    cameraControl.onPan = (x, y) => {
+      vec3.sub(cameraZ, camera.eye, camera.center);
+      vec3.normalize(cameraZ, cameraZ);
+      vec3.cross(cameraX, camera.up, cameraZ);
+      vec3.cross(cameraY, cameraZ, cameraX);
+
+      vec3.scaleAndAdd(camera.eye, camera.eye, cameraX, -x);
+      vec3.scaleAndAdd(camera.eye, camera.eye, cameraY, y);
+      vec3.scaleAndAdd(camera.center, camera.center, cameraX, -x);
+      vec3.scaleAndAdd(camera.center, camera.center, cameraY, y);
+
+      [camera.eyeX, camera.eyeY, camera.eyeZ] = camera.eye;
+      [camera.centerX, camera.centerY, camera.centerZ] = camera.center;
+      config.eyeXController.updateDisplay();
+      config.eyeYController.updateDisplay();
+      config.eyeZController.updateDisplay();
+      config.centerXController.updateDisplay();
+      config.centerYController.updateDisplay();
+      config.centerZController.updateDisplay();
+      render();
+    };
+    // http://learnwebgl.brown37.net/07_cameras/camera_rotating_motion.html
+    cameraControl.onRotate = (x, y) => {
+      camera.rx -= x;
+      camera.ry += y;
+      if (camera.ry > camera.maxy) {
+        camera.ry = camera.maxy;
+      }
+      if (camera.ry < -camera.maxy) {
+        camera.ry = -camera.maxy;
+      }
+      vec3.sub(cameraZ, camera.eye, camera.center);
+      const distance = vec3.length(cameraZ);
+      const xz = Math.cos(camera.ry) * distance;
+      camera.eyeX = camera.centerX + Math.sin(camera.rx) * xz;
+      camera.eyeY = camera.centerY + Math.sin(camera.ry) * distance;
+      camera.eyeZ = camera.centerZ + Math.cos(camera.rx) * xz;
+
+      vec3.set(camera.eye, camera.eyeX, camera.eyeY, camera.eyeZ);
+      config.eyeXController.updateDisplay();
+      config.eyeYController.updateDisplay();
+      config.eyeZController.updateDisplay();
+      render();
+    };
+
+    // config
+    const gui = new GUI();
+    gui.addColor(config, 'clearColor').onChange(() => {
+      render();
+    });
+    const mesh = meshes[0];
+    gui.addColor(mesh.material, 'color').onChange(() => {
+      render();
+    });
+    const setModelMatrix = () => {
+      vec3.set(mesh.translate, mesh.tx, mesh.ty, mesh.tz);
+      vec3.set(mesh.scale, mesh.sx, mesh.sy, mesh.sz);
+      quat.fromEuler(mesh.quat, mesh.rx, mesh.ry, mesh.rz);
+      mat4.fromRotationTranslationScale(mesh.matrix, mesh.quat, mesh.translate, mesh.scale);
+      render();
+    };
+    const modelFolder = gui.addFolder('Model Matrix');
+    modelFolder.add(mesh, 'tx', -2, 2, 0.1).onChange(() => {
+      setModelMatrix();
+    });
+    modelFolder.add(mesh, 'ty', -2, 2, 0.1).onChange(() => {
+      setModelMatrix();
+    });
+    modelFolder.add(mesh, 'tz', -2, 2, 0.1).onChange(() => {
+      setModelMatrix();
+    });
+    modelFolder.add(mesh, 'sx', 0, 2, 0.1).onChange(() => {
+      setModelMatrix();
+    });
+    modelFolder.add(mesh, 'sy', 0, 2, 0.1).onChange(() => {
+      setModelMatrix();
+    });
+    modelFolder.add(mesh, 'sz', 0, 2, 0.1).onChange(() => {
+      setModelMatrix();
+    });
+    modelFolder.add(mesh, 'rx', -360, 360, 10).onChange(() => {
+      setModelMatrix();
+    });
+    modelFolder.add(mesh, 'ry', -360, 360, 10).onChange(() => {
+      setModelMatrix();
+    });
+    modelFolder.add(mesh, 'rz', -360, 360, 10).onChange(() => {
+      setModelMatrix();
+    });
+    const projectionFolder = gui.addFolder('Camera');
+    projectionFolder.add(camera, 'fovy', 0, 180, 1).onChange(() => {
+      render();
+    });
+    projectionFolder.add(camera, 'near', 0, 1, 0.1).onChange(() => {
+      render();
+    });
+    projectionFolder.add(camera, 'far', 10, 1000, 1).onChange(() => {
+      render();
+    });
+    config.eyeXController = projectionFolder.add(camera, 'eyeX').onChange(() => {
+      render();
+    }).step(0.00001);
+    config.eyeYController = projectionFolder.add(camera, 'eyeY').onChange(() => {
+      render();
+    }).step(0.00001);
+    config.eyeZController = projectionFolder.add(camera, 'eyeZ').onChange(() => {
+      render();
+    }).step(0.00001);
+    config.centerXController = projectionFolder.add(camera, 'centerX').onChange(() => {
+      render();
+    }).step(0.00001);
+    config.centerYController = projectionFolder.add(camera, 'centerY').onChange(() => {
+      render();
+    }).step(0.00001);
+    config.centerZController = projectionFolder.add(camera, 'centerZ').onChange(() => {
+      render();
+    }).step(0.00001);
+  </script>
+</body>
+</html>
