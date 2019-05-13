@@ -1,7 +1,7 @@
-export function createBuffer(gl, type, data) {
+export function createBuffer(gl, type, data, usage) {
   const buffer = gl.createBuffer();
   gl.bindBuffer(type, buffer);
-  gl.bufferData(type, data, gl.STATIC_DRAW);
+  gl.bufferData(type, data, usage || gl.STATIC_DRAW);
   gl.bindBuffer(type, null);
   return buffer;
 }
@@ -55,4 +55,9 @@ export function createVertexArray(gl, geometry) {
   gl.bindVertexArray(null);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
   return vao;
+}
+
+export function bindUniformBlock(gl, program, name, index) {
+  const uniformBlockLocation = gl.getUniformBlockIndex(program, name);
+  gl.uniformBlockBinding(program, uniformBlockLocation, index);
 }

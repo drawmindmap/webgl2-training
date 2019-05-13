@@ -14,4 +14,5 @@ export default [
   '13-camera.html',
   '14-geometry.html',
   '15-light.html',
+  '16-uniform-buffer.html',
 ];

@@ -10059,10 +10059,10 @@ function createProgram(gl, vertexSource, fragmentSource) {
   return program;
 }
 
-function createBuffer(gl, type, data) {
+function createBuffer(gl, type, data, usage) {
   const buffer = gl.createBuffer();
   gl.bindBuffer(type, buffer);
-  gl.bufferData(type, data, gl.STATIC_DRAW);
+  gl.bufferData(type, data, usage || gl.STATIC_DRAW);
   gl.bindBuffer(type, null);
   return buffer;
 }
@@ -10116,6 +10116,11 @@ function createVertexArray(gl, geometry) {
   gl.bindVertexArray(null);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
   return vao;
+}
+
+function bindUniformBlock(gl, program, name, index) {
+  const uniformBlockLocation = gl.getUniformBlockIndex(program, name);
+  gl.uniformBlockBinding(program, uniformBlockLocation, index);
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_enabled_image
@@ -10525,4 +10530,4 @@ function createCube() {
   });
 }
 
-export { Camera, GUI$1 as GUI, bindDataBuffer, color, controllers, createBuffer, createCube, createProgram, createSphere, createTexture, createVertexArray, dom$1 as dom, getClientPoint, getPointAt, common as glMatrix, gui, loadImage, loadImageBitmap, loadShader, mat2, mat2d, mat3, mat4, quat, quat2, toHighDPI, toRadians, vec2, vec3, vec4 };
+export { Camera, GUI$1 as GUI, bindDataBuffer, bindUniformBlock, color, controllers, createBuffer, createCube, createProgram, createSphere, createTexture, createVertexArray, dom$1 as dom, getClientPoint, getPointAt, common as glMatrix, gui, loadImage, loadImageBitmap, loadShader, mat2, mat2d, mat3, mat4, quat, quat2, toHighDPI, toRadians, vec2, vec3, vec4 };

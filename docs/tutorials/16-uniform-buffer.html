@@ -8,25 +8,21 @@
       height: 100%;
     }
   </style>
-  <title>WebGL training - Light</title>
+  <title>WebGL training - Uniform Buffer</title>
 </head>
 <body>
   <canvas id="canvas"></canvas>
   <script type="module">
-    // https://webglfundamentals.org/webgl/lessons/webgl-3d-lighting-directional.html
-    // https://webglfundamentals.org/webgl/lessons/webgl-3d-lighting-point.html
-    // https://webglfundamentals.org/webgl/lessons/webgl-3d-lighting-spot.html
-    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial/Lighting_in_WebGL
-    // https://bl.ocks.org/camargo/4d3931b7bfe5b4e08570c5f8ea7e4ec1
     import {
       GUI,
       vec3,
       quat,
-      mat3,
       mat4,
       toHighDPI,
       createProgram,
+      createBuffer,
       createVertexArray,
+      bindUniformBlock,
       createTexture,
       Camera,
       createCube,
@@ -40,11 +36,13 @@
       diffuse: true,
       specular: true,
       ambientColor: [0.3 * 255, 0.3 * 255, 0.3 * 255],
+      ambientColorValue: [0.3, 0.3, 0.3],
       lightDirectionX: -1,
       lightDirectionY: -1,
       lightDirectionZ: -1,
       lightDirection: [-1, -1, -1],
       lightColor: [1 * 255, 1 * 255, 1 * 255],
+      lightColorValue: [1, 1, 1],
     };
 
     function setLightDirection() {
@@ -61,7 +59,7 @@
       {
         geometry: createCube(),
         material: {
-          color: [255, 255, 255],
+          color: [1, 1, 1],
           image: '../asset/images/crate.gif',
         },
         tx: -1.5,
@@ -77,12 +75,12 @@
         scale: vec3.create(),
         quat: quat.create(),
         matrix: mat4.create(),
-        normalMatrix: mat3.create(),
+        normalMatrix: mat4.create(),
       },
       {
         geometry: createSphere(),
         material: {
-          color: [255, 255, 255],
+          color: [1, 1, 1],
           image: '../asset/images/crate.gif',
         },
         tx: 1.5,
@@ -98,7 +96,7 @@
         scale: vec3.create(),
         quat: quat.create(),
         matrix: mat4.create(),
-        normalMatrix: mat3.create(),
+        normalMatrix: mat4.create(),
       },
     ];
     const canvas = document.getElementById('canvas');
@@ -107,14 +105,34 @@
     // 02.1: create program from shader source
     const program = createProgram(gl, `#version 300 es
       precision highp float;
+      layout(std140, column_major) uniform;
 
       layout(location = 0) in vec3 a_position;
       layout(location = 1) in vec2 a_uv;
       layout(location = 2) in vec3 a_normal;
-      uniform mat4 u_modelMatrix;
-      uniform mat3 u_normalMatrix;
-      uniform mat4 u_viewMatrix;
-      uniform mat4 u_projectionMatrix;
+
+      struct DirectionLight {
+        vec3 direction;
+        vec3 color;
+        float ambient;
+        float diffuse;
+        float specular;
+      };
+
+      uniform Scene {
+        uniform mat4 u_viewMatrix;
+        uniform mat4 u_projectionMatrix;
+        uniform vec3 u_eyePosition;
+        uniform vec3 u_ambientColor;
+        uniform DirectionLight u_directionLight;
+      };
+
+      uniform Model {
+        uniform mat4 u_modelMatrix;
+        uniform mat4 u_normalMatrix;
+        uniform vec3 u_color;
+      };
+
       out vec2 v_uv;
       out vec3 v_normal;
       out vec3 v_position;
@@ -125,20 +143,35 @@
         position = u_projectionMatrix * u_viewMatrix * position;
         gl_Position = position;
         v_uv = vec2(a_uv.x, 1.0 - a_uv.y);
-        v_normal = u_normalMatrix * a_normal;
+        v_normal = mat3(u_normalMatrix) * a_normal;
       }
     `, `#version 300 es
       precision highp float;
+      layout(std140, column_major) uniform;
 
-      uniform vec3 u_eyePosition;
-      uniform vec3 u_ambientColor;
-      uniform vec3 u_lightDirection;
-      uniform vec3 u_lightColor;
-      uniform vec3 u_color;
-      uniform bool u_ambient;
-      uniform bool u_diffuse;
-      uniform bool u_specular;
+      struct DirectionLight {
+        vec3 direction;
+        vec3 color;
+        float ambient;
+        float diffuse;
+        float specular;
+      };
+
+      uniform Scene {
+        uniform mat4 u_viewMatrix;
+        uniform mat4 u_projectionMatrix;
+        uniform vec3 u_eyePosition;
+        uniform vec3 u_ambientColor;
+        uniform DirectionLight u_directionLight;
+      };
+
+      uniform Model {
+        uniform mat4 u_modelMatrix;
+        uniform mat4 u_normalMatrix;
+        uniform vec3 u_color;
+      };
       uniform sampler2D u_texture;
+
       in vec2 v_uv;
       in vec3 v_normal;
       in vec3 v_position;
@@ -146,43 +179,30 @@
 
       void main () {
         vec4 color = texture(u_texture, v_uv);
+        // vec4 color = vec4(0.5, 0.5, 0.5, 1.0);
         vec3 baseColor = color.rgb * u_color;
         vec3 normal = normalize(v_normal);
-        float diffuse = max(0.0, dot(-u_lightDirection, normal));
+        float diffuse = max(0.0, dot(-u_directionLight.direction, normal));
         float specular = 0.0;
         if (diffuse > 0.0) {
           vec3 eyeDirection = normalize(u_eyePosition - v_position);
-          specular = pow(max(0.0, dot(reflect(u_lightDirection, normal), eyeDirection)), 64.0);
+          specular = pow(max(0.0, dot(reflect(u_directionLight.direction, normal), eyeDirection)), 64.0);
         }
-        vec3 ambientColor = vec3(0.0);
-        vec3 diffuseColor = vec3(0.0);
-        vec3 specularColor = vec3(0.0);
-        if (u_ambient) {
-          ambientColor = u_ambientColor * baseColor;
-        }
-        if (u_diffuse) {
-          diffuseColor = diffuse * u_lightColor * baseColor;
-        }
-        if (u_specular) {
-          specularColor = specular * u_lightColor;
-        }
+        vec3 ambientColor = u_ambientColor * baseColor * u_directionLight.ambient;
+        vec3 diffuseColor = diffuse * u_directionLight.color * baseColor * u_directionLight.diffuse;
+        vec3 specularColor = specular * u_directionLight.color * u_directionLight.specular;
         fragColor = vec4(ambientColor + diffuseColor + specularColor, 1.0);
       }
     `);
-    // 02.2: get uniform locations
-    const modelMatrixUniform = gl.getUniformLocation(program, 'u_modelMatrix');
-    const normalMatrixUniform = gl.getUniformLocation(program, 'u_normalMatrix');
-    const viewMatrixUniform = gl.getUniformLocation(program, 'u_viewMatrix');
-    const projectionMatrixUniform = gl.getUniformLocation(program, 'u_projectionMatrix');
-    const colorUniform = gl.getUniformLocation(program, 'u_color');
+    // 02.2: get uniform block locations
+    // https://github.com/WebGLSamples/WebGL2Samples/blob/master/samples/buffer_uniform.html
+    bindUniformBlock(gl, program, 'Scene', 0);
+    bindUniformBlock(gl, program, 'Model', 1);
+    const sceneUniformData = new Float32Array(16 + 16 + 4 + 4 + 4 + 4 + 4);
+    const sceneUniformBuffer = createBuffer(gl, gl.UNIFORM_BUFFER, sceneUniformData, gl.DYNAMIC_DRAW);
+    const modelUniformData = new Float32Array(16 + 16 + 4);
+    const modelUniformBuffer = createBuffer(gl, gl.UNIFORM_BUFFER, modelUniformData, gl.DYNAMIC_DRAW);
     const textureUniform = gl.getUniformLocation(program, 'u_texture');
-    const eyePositionUniform = gl.getUniformLocation(program, 'u_eyePosition');
-    const ambientColorUniform = gl.getUniformLocation(program, 'u_ambientColor');
-    const lightDirectionUniform = gl.getUniformLocation(program, 'u_lightDirection');
-    const lightColorUniform = gl.getUniformLocation(program, 'u_lightColor');
-    const ambientUniform = gl.getUniformLocation(program, 'u_ambient');
-    const diffuseUniform = gl.getUniformLocation(program, 'u_diffuse');
-    const specularUniform = gl.getUniformLocation(program, 'u_specular');
 
     meshes.forEach((mesh) => {
       // 03: create vao
@@ -192,7 +212,11 @@
       vec3.set(mesh.scale, mesh.sx, mesh.sy, mesh.sz);
       quat.fromEuler(mesh.quat, mesh.rx, mesh.ry, mesh.rz);
       mat4.fromRotationTranslationScale(mesh.matrix, mesh.quat, mesh.translate, mesh.scale);
-      mat3.normalFromMat4(mesh.normalMatrix, mesh.matrix);
+      mat4.invert(mesh.normalMatrix, mesh.matrix);
+      // http://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/
+      // https://gamedev.stackexchange.com/questions/115135/opengl-glsl-matrix-in-uniform-block-confusion
+      // https://www.gamedev.net/forums/topic/574897-help-with-uniform-buffer-objects/
+      mat4.transpose(mesh.normalMatrix, mesh.normalMatrix);
     });
 
     // setup camera control
@@ -217,43 +241,42 @@
       // 06: use program
       gl.useProgram(program);
 
-      // 07.1: set view matrix
-      gl.uniformMatrix4fv(viewMatrixUniform, false, camera.getViewMatrix());
-      // 07.2: set projection matrix
-      gl.uniformMatrix4fv(projectionMatrixUniform, false, camera.getProjectionMatrix());
-      // 07.3: set color uniform
-      gl.uniform3f(
-        ambientColorUniform,
-        config.ambientColor[0] / 255,
-        config.ambientColor[1] / 255,
-        config.ambientColor[2] / 255,
-      );
-      gl.uniform3fv(lightDirectionUniform, config.lightDirection);
-      gl.uniform3f(
-        lightColorUniform,
-        config.lightColor[0] / 255,
-        config.lightColor[1] / 255,
-        config.lightColor[2] / 255,
-      );
-      gl.uniform3fv(eyePositionUniform, camera.eye);
-      gl.uniform1i(ambientUniform, config.ambient);
+      /* gl.uniform1i(ambientUniform, config.ambient);
       gl.uniform1i(diffuseUniform, config.diffuse);
-      gl.uniform1i(specularUniform, config.specular);
+      gl.uniform1i(specularUniform, config.specular); */
+
+      // 07: set scene uniform buffer
+      gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, sceneUniformBuffer);
+      let offset = 0;
+      // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/set
+      sceneUniformData.set(camera.getViewMatrix(), offset);
+      offset += 16;
+      sceneUniformData.set(camera.getProjectionMatrix(), offset);
+      offset += 16;
+      sceneUniformData.set(camera.eye, offset);
+      offset += 4;
+      sceneUniformData.set(config.ambientColorValue, offset);
+      offset += 4;
+      sceneUniformData.set(config.lightDirection, offset);
+      offset += 4;
+      sceneUniformData.set(config.lightColorValue, offset);
+      offset += 3;
+      sceneUniformData[offset] = config.ambient ? 1 : 0;
+      sceneUniformData[offset + 1] = config.diffuse ? 1 : 0;
+      sceneUniformData[offset + 2] = config.specular ? 1 : 0;
+      gl.bufferSubData(gl.UNIFORM_BUFFER, 0, sceneUniformData);
 
       meshes.forEach((mesh) => {
-        // 08.1: set color uniform
-        gl.uniform3f(
-          colorUniform,
-          mesh.material.color[0] / 255,
-          mesh.material.color[1] / 255,
-          mesh.material.color[2] / 255,
-        );
-        // 08.2: set texture uniform
+        // 08: set model uniform buffer
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, modelUniformBuffer);
+        offset = 0;
+        modelUniformData.set(mesh.matrix, offset);
+        offset += 16;
+        modelUniformData.set(mesh.normalMatrix, offset);
+        offset += 16;
+        modelUniformData.set(mesh.material.color, offset);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, modelUniformData);
         gl.uniform1i(textureUniform, 0);
-        // 08.3: set model matrix uniform
-        gl.uniformMatrix4fv(modelMatrixUniform, false, mesh.matrix);
-        // 08.4: set normal matrix uniform
-        gl.uniformMatrix3fv(normalMatrixUniform, false, mesh.normalMatrix);
 
         // 09: bind texture
         gl.activeTexture(gl.TEXTURE0);
@@ -324,9 +347,15 @@
       render();
     });
     lightFolder.addColor(config, 'ambientColor').onChange(() => {
+      config.ambientColorValue[0] = config.ambientColor[0] / 255;
+      config.ambientColorValue[1] = config.ambientColor[1] / 255;
+      config.ambientColorValue[2] = config.ambientColor[2] / 255;
       render();
     });
     lightFolder.addColor(config, 'lightColor').onChange(() => {
+      config.lightColorValue[0] = config.lightColor[0] / 255;
+      config.lightColorValue[1] = config.lightColor[1] / 255;
+      config.lightColorValue[2] = config.lightColor[2] / 255;
       render();
     });
     lightFolder.add(config, 'lightDirectionX', -10, 10, 0.1).onChange(() => {
