@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    html, body {
+      margin: 0;
+      overflow: hidden;
+      height: 100%;
+    }
+  </style>
+  <title>WebGL training - Camera</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import {
+      GUI,
+      vec3,
+      quat,
+      mat4,
+      toHighDPI,
+      createProgram,
+      createVertexArray,
+      createTexture,
+      Camera,
+      createCube,
+      createSphere,
+    } from '../js/bundle.js';
+
+    let ready = false;
+    const config = {
+      clearColor: [0, 0, 0],
+    };
+    const meshes = [
+      {
+        geometry: createCube(),
+        material: {
+          color: [255, 255, 255],
+          image: '../asset/images/crate.gif',
+        },
+        tx: -1.5,
+        ty: 0.0,
+        tz: 0.0,
+        sx: 1.0,
+        sy: 1.0,
+        sz: 1.0,
+        rx: 0.0,
+        ry: 0.0,
+        rz: 0.0,
+        translate: vec3.create(),
+        scale: vec3.create(),
+        quat: quat.create(),
+        matrix: mat4.create(),
+      },
+      {
+        geometry: createSphere(),
+        material: {
+          color: [255, 255, 255],
+          image: '../asset/images/crate.gif',
+        },
+        tx: 1.5,
+        ty: 0.0,
+        tz: 0.0,
+        sx: 1.0,
+        sy: 1.0,
+        sz: 1.0,
+        rx: 0.0,
+        ry: 0.0,
+        rz: 0.0,
+        translate: vec3.create(),
+        scale: vec3.create(),
+        quat: quat.create(),
+        matrix: mat4.create(),
+      },
+    ];
+    const canvas = document.getElementById('canvas');
+    // 01: create WebGL context
+    const gl = canvas.getContext('webgl2');
+    // 02.1: create program from shader source
+    const program = createProgram(gl, `#version 300 es
+      precision highp float;
+
+      layout(location = 0) in vec3 a_position;
+      layout(location = 1) in vec2 a_uv;
+      uniform mat4 u_modelMatrix;
+      uniform mat4 u_viewMatrix;
+      uniform mat4 u_projectionMatrix;
+      out vec2 v_uv;
+
+      void main () {
+        vec4 position = vec4(a_position, 1.0);
+        position = u_projectionMatrix * u_viewMatrix * u_modelMatrix * position;
+        gl_Position = position;
+        v_uv = vec2(a_uv.x, 1.0 - a_uv.y);
+      }
+    `, `#version 300 es
+      precision highp float;
+
+      uniform vec3 u_color;
+      uniform sampler2D u_texture;
+      in vec2 v_uv;
+      out vec4 fragColor;
+
+      void main () {
+        vec4 color = texture(u_texture, v_uv);
+        fragColor = vec4(color.rgb * u_color, 1.0);
+      }
+    `);
+    // 02.2: get uniform locations
+    const modelMatrixUniform = gl.getUniformLocation(program, 'u_modelMatrix');
+    const viewMatrixUniform = gl.getUniformLocation(program, 'u_viewMatrix');
+    const projectionMatrixUniform = gl.getUniformLocation(program, 'u_projectionMatrix');
+    const colorUniform = gl.getUniformLocation(program, 'u_color');
+    const textureUniform = gl.getUniformLocation(program, 'u_texture');
+
+    meshes.forEach((mesh) => {
+      // 03: create vao
+      mesh.vao = createVertexArray(gl, mesh.geometry);
+      // calculate matrix
+      vec3.set(mesh.translate, mesh.tx, mesh.ty, mesh.tz);
+      vec3.set(mesh.scale, mesh.sx, mesh.sy, mesh.sz);
+      quat.fromEuler(mesh.quat, mesh.rx, mesh.ry, mesh.rz);
+      mat4.fromRotationTranslationScale(mesh.matrix, mesh.quat, mesh.translate, mesh.scale);
+    });
+
+    // setup camera control
+    const camera = new Camera();
+    camera.attach(canvas);
+
+    function render() {
+      if (!ready) {
+        return;
+      }
+      // 05: clean canvas before drawing
+      gl.clearColor(
+        config.clearColor[0] / 255,
+        config.clearColor[1] / 255,
+        config.clearColor[2] / 255,
+        1,
+      );
+      // eslint-disable-next-line
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.DEPTH_TEST);
+
+      // 06: use program
+      gl.useProgram(program);
+
+      // 07.1: set view matrix
+      gl.uniformMatrix4fv(viewMatrixUniform, false, camera.getViewMatrix());
+      // 07.2: set projection matrix
+      gl.uniformMatrix4fv(projectionMatrixUniform, false, camera.getProjectionMatrix());
+
+      meshes.forEach((mesh) => {
+        // 08.1: set color uniform
+        gl.uniform3f(
+          colorUniform,
+          mesh.material.color[0] / 255,
+          mesh.material.color[1] / 255,
+          mesh.material.color[2] / 255,
+        );
+        // 08.2: set texture uniform
+        gl.uniform1i(textureUniform, 0);
+        // 08.3: set model matrix uniform
+        gl.uniformMatrix4fv(modelMatrixUniform, false, mesh.matrix);
+
+        // 09: bind texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, mesh.material.texture);
+
+        // 10: bind vao
+        gl.bindVertexArray(mesh.vao);
+
+        // 11: draw triangles
+        if (mesh.geometry.indices) {
+          gl.drawElements(gl.TRIANGLES, mesh.geometry.count, gl.UNSIGNED_SHORT, 0);
+        } else {
+          gl.drawArrays(gl.TRIANGLES, 0, mesh.geometry.count);
+        }
+      });
+
+      gl.useProgram(null);
+    }
+
+    // handle resize
+    function resize() {
+      const { clientWidth, clientHeight } = document.documentElement;
+      canvas.width = clientWidth;
+      canvas.height = clientHeight;
+      // handle high DPI screen
+      toHighDPI(canvas);
+      // set viewport
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      render();
+    }
+
+    window.onresize = resize;
+    resize();
+
+    // 04: create texture
+    (async () => {
+      const textures = await Promise.all(meshes.map(mesh => createTexture(gl, mesh.material.image)));
+      textures.forEach((texture, i) => {
+        meshes[i].material.texture = texture;
+      });
+      ready = true;
+      render();
+    })();
+
+    camera.onZoom = (scale) => {
+      render();
+    };
+    camera.onPan = (x, y) => {
+      render();
+    };
+    camera.onRotate = (x, y) => {
+      render();
+    };
+
+    // config
+    const gui = new GUI();
+    gui.addColor(config, 'clearColor').onChange(() => {
+      render();
+    });
+  </script>
+</body>
+</html>

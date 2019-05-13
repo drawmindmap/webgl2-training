@@ -16,20 +16,7 @@ export function bindDataBuffer(gl, buffer, index, size, type, stride, offset) {
 export function createVertexArray(gl, geometry) {
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
-  if (geometry.length) {
-    geometry.forEach((geometryData, i) => {
-      const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometryData.data);
-      bindDataBuffer(
-        gl,
-        buffer,
-        geometryData.index || i,
-        geometryData.size,
-        geometryData.type,
-        geometryData.stride,
-        geometryData.offset,
-      );
-    });
-  } else {
+  if (geometry.stride) {
     const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometry.data);
     geometry.attributes.forEach((attribute, i) => {
       bindDataBuffer(
@@ -43,7 +30,29 @@ export function createVertexArray(gl, geometry) {
       );
     });
     geometry.count = geometry.data.byteLength / geometry.stride;
+  } else {
+    if (geometry.indices) {
+      const indexBuffer = createBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, geometry.indices);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      geometry.count = geometry.indices.length;
+    }
+    geometry.attributes.forEach((geometryData, i) => {
+      const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometryData.data);
+      bindDataBuffer(
+        gl,
+        buffer,
+        geometryData.index || i,
+        geometryData.size,
+        geometryData.type,
+        geometryData.stride,
+        geometryData.offset,
+      );
+      if ((geometryData.index || i) === 0 && !geometry.count) {
+        geometry.count = geometryData.data.length;
+      }
+    });
   }
   gl.bindVertexArray(null);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
   return vao;
 }

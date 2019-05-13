@@ -5,3 +5,4 @@ export * from './Program';
 export * from './Buffer';
 export * from './Texture';
 export { default as Camera } from './Camera';
+export * from './Geometry';

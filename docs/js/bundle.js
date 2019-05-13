@@ -10077,20 +10077,7 @@ function bindDataBuffer(gl, buffer, index, size, type, stride, offset) {
 function createVertexArray(gl, geometry) {
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
-  if (geometry.length) {
-    geometry.forEach((geometryData, i) => {
-      const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometryData.data);
-      bindDataBuffer(
-        gl,
-        buffer,
-        geometryData.index || i,
-        geometryData.size,
-        geometryData.type,
-        geometryData.stride,
-        geometryData.offset,
-      );
-    });
-  } else {
+  if (geometry.stride) {
     const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometry.data);
     geometry.attributes.forEach((attribute, i) => {
       bindDataBuffer(
@@ -10104,8 +10091,30 @@ function createVertexArray(gl, geometry) {
       );
     });
     geometry.count = geometry.data.byteLength / geometry.stride;
+  } else {
+    if (geometry.indices) {
+      const indexBuffer = createBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, geometry.indices);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      geometry.count = geometry.indices.length;
+    }
+    geometry.attributes.forEach((geometryData, i) => {
+      const buffer = createBuffer(gl, gl.ARRAY_BUFFER, geometryData.data);
+      bindDataBuffer(
+        gl,
+        buffer,
+        geometryData.index || i,
+        geometryData.size,
+        geometryData.type,
+        geometryData.stride,
+        geometryData.offset,
+      );
+      if ((geometryData.index || i) === 0 && !geometry.count) {
+        geometry.count = geometryData.data.length;
+      }
+    });
   }
   gl.bindVertexArray(null);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
   return vao;
 }
 
@@ -10319,4 +10328,201 @@ class Camera {
   }
 }
 
-export { Camera, GUI$1 as GUI, bindDataBuffer, color, controllers, createBuffer, createProgram, createTexture, createVertexArray, dom$1 as dom, getClientPoint, getPointAt, common as glMatrix, gui, loadImage, loadImageBitmap, loadShader, mat2, mat2d, mat3, mat4, quat, quat2, toHighDPI, toRadians, vec2, vec3, vec4 };
+// https://github.com/pissang/geometry-extrude
+// https://github.com/dmnsgn/primitive-geometry
+// https://github.com/deathcap/box-geometry
+// https://github.com/vorg/primitive-capsule
+// https://github.com/vorg/primitive-cube
+// https://github.com/vorg/primitive-sphere
+// https://github.com/vorg/primitive-rounded-cube
+
+function toGeometry(geometryData) {
+  return {
+    indices: new Uint16Array(geometryData.indices),
+    attributes: [
+      {
+        data: new Float32Array(geometryData.vertices),
+        index: 0,
+        size: 3,
+      },
+      {
+        data: new Float32Array(geometryData.textures),
+        index: 1,
+        size: 2,
+      },
+      {
+        data: new Float32Array(geometryData.normals),
+        index: 2,
+        size: 3,
+      },
+    ],
+  };
+}
+
+// https://github.com/nickdesaulniers/prims
+// http://learningwebgl.com/blog/?p=1253
+function createSphere() {
+  const vertices = [];
+  const textures = [];
+  const normals = [];
+  const indices = [];
+
+  const latitudeBands = 30;
+  const longitudeBands = 30;
+  const radius = 1.0;
+
+  for (let latNumber = 0; latNumber <= latitudeBands; latNumber += 1) {
+    const theta = latNumber * Math.PI / latitudeBands;
+    const sinTheta = Math.sin(theta);
+    const cosTheta = Math.cos(theta);
+
+    for (let longNumber = 0; longNumber <= longitudeBands; longNumber += 1) {
+      const phi = longNumber * 2 * Math.PI / longitudeBands;
+      const sinPhi = Math.sin(phi);
+      const cosPhi = Math.cos(phi);
+
+      const x = cosPhi * sinTheta;
+      const y = cosTheta;
+      const z = sinPhi * sinTheta;
+      const u = 1 - longNumber / longitudeBands;
+      const v = 1 - latNumber / latitudeBands;
+
+      normals.push(x, y, z);
+      textures.push(u, v);
+      vertices.push(radius * x, radius * y, radius * z);
+    }
+  }
+
+  for (let latNumber = 0; latNumber < latitudeBands; latNumber += 1) {
+    for (let longNumber = 0; longNumber < longitudeBands; longNumber += 1) {
+      const first = latNumber * (longitudeBands + 1) + longNumber;
+      const second = first + longitudeBands + 1;
+      indices.push(second, first, first + 1, second + 1, second, first + 1);
+    }
+  }
+
+  return toGeometry({
+    vertices,
+    textures,
+    normals,
+    indices,
+  });
+}
+
+function createCube() {
+  const vertices = [
+    // x,    y,    z
+    // front face (z: +1)
+    1.0, 1.0, 1.0, // top right
+    -1.0, 1.0, 1.0, // top left
+    -1.0, -1.0, 1.0, // bottom left
+    1.0, -1.0, 1.0, // bottom right
+    // right face (x: +1)
+    1.0, 1.0, -1.0, // top right
+    1.0, 1.0, 1.0, // top left
+    1.0, -1.0, 1.0, // bottom left
+    1.0, -1.0, -1.0, // bottom right
+    // top face (y: +1)
+    1.0, 1.0, -1.0, // top right
+    -1.0, 1.0, -1.0, // top left
+    -1.0, 1.0, 1.0, // bottom left
+    1.0, 1.0, 1.0, // bottom right
+    // left face (x: -1)
+    -1.0, 1.0, 1.0, // top right
+    -1.0, 1.0, -1.0, // top left
+    -1.0, -1.0, -1.0, // bottom left
+    -1.0, -1.0, 1.0, // bottom right
+    // bottom face (y: -1)
+    1.0, -1.0, 1.0, // top right
+    -1.0, -1.0, 1.0, // top left
+    -1.0, -1.0, -1.0, // bottom left
+    1.0, -1.0, -1.0, // bottom right
+    // back face (z: -1)
+    -1.0, 1.0, -1.0, // top right
+    1.0, 1.0, -1.0, // top left
+    1.0, -1.0, -1.0, // bottom left
+    -1.0, -1.0, -1.0, // bottom right
+  ];
+
+  const normals = [
+    0.0, 0.0, 1.0,
+    0.0, 0.0, 1.0,
+    0.0, 0.0, 1.0,
+    0.0, 0.0, 1.0,
+
+    1.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+
+    0.0, 1.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 1.0, 0.0,
+
+    -1.0, 0.0, 0.0,
+    -1.0, 0.0, 0.0,
+    -1.0, 0.0, 0.0,
+    -1.0, 0.0, 0.0,
+
+    0.0, -1.0, 0.0,
+    0.0, -1.0, 0.0,
+    0.0, -1.0, 0.0,
+    0.0, -1.0, 0.0,
+
+    0.0, 0.0, -1.0,
+    0.0, 0.0, -1.0,
+    0.0, 0.0, -1.0,
+    0.0, 0.0, -1.0,
+  ];
+
+  const textures = [
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+  ];
+
+  const indices = [
+    0, 1, 2, 0, 2, 3,
+    4, 5, 6, 4, 6, 7,
+    8, 9, 10, 8, 10, 11,
+    12, 13, 14, 12, 14, 15,
+    16, 17, 18, 16, 18, 19,
+    20, 21, 22, 20, 22, 23,
+  ];
+
+  return toGeometry({
+    vertices,
+    textures,
+    normals,
+    indices,
+  });
+}
+
+export { Camera, GUI$1 as GUI, bindDataBuffer, color, controllers, createBuffer, createCube, createProgram, createSphere, createTexture, createVertexArray, dom$1 as dom, getClientPoint, getPointAt, common as glMatrix, gui, loadImage, loadImageBitmap, loadShader, mat2, mat2d, mat3, mat4, quat, quat2, toHighDPI, toRadians, vec2, vec3, vec4 };
