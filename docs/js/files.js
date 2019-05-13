@@ -15,4 +15,7 @@ export default [
   '14-geometry.html',
   '15-light.html',
   '16-uniform-buffer.html',
+  '17-flat-shading.html',
+  '18-gouraud-shading.html',
+  '19-phong-shading.html',
 ];
