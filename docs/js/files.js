@@ -13,4 +13,5 @@ export default [
   '12-view-matrix.html',
   '13-camera.html',
   '14-geometry.html',
+  '15-light.html',
 ];
