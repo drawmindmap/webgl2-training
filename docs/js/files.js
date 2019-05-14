@@ -18,4 +18,5 @@ export default [
   '17-flat-shading.html',
   '18-gouraud-shading.html',
   '19-phong-shading.html',
+  '20-two-programs.html',
 ];

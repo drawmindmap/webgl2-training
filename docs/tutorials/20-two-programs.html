@@ -8,7 +8,7 @@
       height: 100%;
     }
   </style>
-  <title>WebGL training - Uniform Buffer</title>
+  <title>WebGL training - Two Programs</title>
 </head>
 <body>
   <canvas id="canvas"></canvas>
@@ -59,8 +59,7 @@
       {
         geometry: createCube(),
         material: {
-          color: [1, 1, 1],
-          image: '../asset/images/crate.gif',
+          color: [0.5, 0.5, 0.5],
         },
         tx: -1.5,
         ty: 0.0,
@@ -203,8 +202,96 @@
     const modelUniformBuffer = createBuffer(gl, gl.UNIFORM_BUFFER, modelUniformData, gl.DYNAMIC_DRAW);
     const textureUniform = gl.getUniformLocation(program, 'u_texture');
 
+    // 02.3: create another program without texture
+    const simpleProgram = createProgram(gl, `#version 300 es
+      precision highp float;
+      layout(std140, column_major) uniform;
+
+      layout(location = 0) in vec3 a_position;
+      layout(location = 2) in vec3 a_normal;
+
+      struct DirectionLight {
+        vec3 direction;
+        vec3 color;
+        float ambient;
+        float diffuse;
+        float specular;
+      };
+
+      uniform Scene {
+        uniform mat4 u_viewMatrix;
+        uniform mat4 u_projectionMatrix;
+        uniform vec3 u_eyePosition;
+        uniform vec3 u_ambientColor;
+        uniform DirectionLight u_directionLight;
+      };
+
+      uniform Model {
+        uniform mat4 u_modelMatrix;
+        uniform mat4 u_normalMatrix;
+        uniform vec3 u_color;
+      };
+
+      out vec3 v_normal;
+      out vec3 v_position;
+
+      void main () {
+        vec4 position = u_modelMatrix * vec4(a_position, 1.0);
+        v_position = position.xyz;
+        position = u_projectionMatrix * u_viewMatrix * position;
+        gl_Position = position;
+        v_normal = mat3(u_normalMatrix) * a_normal;
+      }
+    `, `#version 300 es
+      precision highp float;
+      layout(std140, column_major) uniform;
+
+      struct DirectionLight {
+        vec3 direction;
+        vec3 color;
+        float ambient;
+        float diffuse;
+        float specular;
+      };
+
+      uniform Scene {
+        uniform mat4 u_viewMatrix;
+        uniform mat4 u_projectionMatrix;
+        uniform vec3 u_eyePosition;
+        uniform vec3 u_ambientColor;
+        uniform DirectionLight u_directionLight;
+      };
+
+      uniform Model {
+        uniform mat4 u_modelMatrix;
+        uniform mat4 u_normalMatrix;
+        uniform vec3 u_color;
+      };
+
+      in vec3 v_normal;
+      in vec3 v_position;
+      out vec4 fragColor;
+
+      void main () {
+        vec3 baseColor = u_color;
+        vec3 normal = normalize(v_normal);
+        float diffuse = max(0.0, dot(-u_directionLight.direction, normal));
+        float specular = 0.0;
+        if (diffuse > 0.0) {
+          vec3 eyeDirection = normalize(u_eyePosition - v_position);
+          specular = pow(max(0.0, dot(reflect(u_directionLight.direction, normal), eyeDirection)), 64.0);
+        }
+        vec3 ambientColor = u_ambientColor * baseColor * u_directionLight.ambient;
+        vec3 diffuseColor = diffuse * u_directionLight.color * baseColor * u_directionLight.diffuse;
+        vec3 specularColor = specular * u_directionLight.color * u_directionLight.specular;
+        fragColor = vec4(ambientColor + diffuseColor + specularColor, 1.0);
+      }
+    `);
+    bindUniformBlock(gl, simpleProgram, 'Scene', 0);
+    bindUniformBlock(gl, simpleProgram, 'Model', 1);
+
     meshes.forEach((mesh) => {
-      // 03: create vao
+      // 03.1: create vao
       mesh.vao = createVertexArray(gl, mesh.geometry);
       // calculate matrix
       vec3.set(mesh.translate, mesh.tx, mesh.ty, mesh.tz);
@@ -216,6 +303,13 @@
       // https://gamedev.stackexchange.com/questions/115135/opengl-glsl-matrix-in-uniform-block-confusion
       // https://www.gamedev.net/forums/topic/574897-help-with-uniform-buffer-objects/
       mat4.transpose(mesh.normalMatrix, mesh.normalMatrix);
+
+      // 03.2 set program
+      if (mesh.material.image) {
+        mesh.program = program;
+      } else {
+        mesh.program = simpleProgram;
+      }
     });
 
     // setup camera control
@@ -237,10 +331,7 @@
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST);
 
-      // 06: use program
-      gl.useProgram(program);
-
-      // 07: set scene uniform buffer
+      // 06: set scene uniform buffer
       gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, sceneUniformBuffer);
       let offset = 0;
       // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/set
@@ -262,6 +353,9 @@
       gl.bufferSubData(gl.UNIFORM_BUFFER, 0, sceneUniformData);
 
       meshes.forEach((mesh) => {
+        // 07: use program
+        gl.useProgram(mesh.program);
+
         // 08: set model uniform buffer
         gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, modelUniformBuffer);
         offset = 0;
@@ -271,11 +365,13 @@
         offset += 16;
         modelUniformData.set(mesh.material.color, offset);
         gl.bufferSubData(gl.UNIFORM_BUFFER, 0, modelUniformData);
-        gl.uniform1i(textureUniform, 0);
 
-        // 09: bind texture
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, mesh.material.texture);
+        if (mesh.material.image) {
+          // 09: bind texture
+          gl.uniform1i(textureUniform, 0);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, mesh.material.texture);
+        }
 
         // 10: bind vao
         gl.bindVertexArray(mesh.vao);
@@ -308,9 +404,13 @@
 
     // 04: create texture
     (async () => {
-      const textures = await Promise.all(meshes.map(mesh => createTexture(gl, mesh.material.image)));
+      const meshesWithTexture = meshes.filter((mesh => !!mesh.material.image));
+      const textures = await Promise.all(meshesWithTexture.map((mesh) => {
+        const promise = createTexture(gl, mesh.material.image);
+        return promise;
+      }));
       textures.forEach((texture, i) => {
-        meshes[i].material.texture = texture;
+        meshesWithTexture[i].material.texture = texture;
       });
       ready = true;
       render();
