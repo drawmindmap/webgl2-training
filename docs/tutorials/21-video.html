@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    html, body {
+      margin: 0;
+      overflow: hidden;
+      height: 100%;
+    }
+  </style>
+  <title>WebGL training - Video</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import {
+      GUI,
+      Stats,
+      toHighDPI,
+      createProgram,
+      createVertexArray,
+    } from '../js/bundle.js';
+
+    let ready = false;
+    const config = {
+      useVideoTexture: false,
+    };
+    const mesh = {
+      geometry: {
+        data: new Float32Array([
+          -1, -1, 0, 0,
+          1, -1, 1, 0,
+          -1, 1, 0, 1,
+          1, 1, 1, 1,
+          1, -1, 1, 0,
+          -1, 1, 0, 1,
+        ]),
+        stride: 4 * 4,
+        attributes: [
+          {
+            index: 0,
+            size: 2,
+            offset: 0,
+          },
+          {
+            index: 1,
+            size: 2,
+            offset: 2 * 4,
+          },
+        ],
+      },
+      material: {
+        url: '../asset/video/sintel.mp4',
+      },
+    };
+    const stats = new Stats();
+    document.body.appendChild(stats.dom);
+    const canvas = document.getElementById('canvas');
+    // 01: create WebGL context
+    const gl = canvas.getContext('webgl2');
+    const ext = gl.getExtension('WEBGL_video_texture');
+    // 02.1: create program from shader source
+    const program = createProgram(gl, `#version 300 es
+      precision highp float;
+
+      layout(location = 0) in vec2 a_position;
+      layout(location = 1) in vec2 a_uv;
+      out vec2 v_uv;
+
+      void main () {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+        v_uv = vec2(a_uv.x, 1.0 - a_uv.y);
+      }
+    `, `#version 300 es
+      precision highp float;
+
+      uniform sampler2D u_texture;
+      in vec2 v_uv;
+      out vec4 fragColor;
+
+      void main () {
+        fragColor = texture(u_texture, v_uv);
+      }
+    `);
+    // 02.2: get uniform locations
+    const textureUniform = gl.getUniformLocation(program, 'u_texture');
+
+    // 03: create vao
+    mesh.vao = createVertexArray(gl, mesh.geometry);
+
+    // 04: create texture
+    const video = document.createElement('video');
+    video.width = 256;
+    video.height = 256;
+    video.autoplay = true;
+    video.muted = true;
+    video.src = mesh.material.url;
+    video.play();
+    video.onplaying = (e) => {
+      ready = true;
+      console.log('onplaying');
+      mesh.material.video = video;
+    };
+
+    function draw() {
+      if (!ready) {
+        return;
+      }
+      // 05: clean canvas before drawing
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // 06: use program
+      gl.useProgram(program);
+
+      // 07.1: set texture uniform
+      gl.uniform1i(textureUniform, 0);
+
+      // 08: bind texture
+      gl.activeTexture(gl.TEXTURE0);
+
+      if (!mesh.material.texture) {
+        const videoTexture = gl.createTexture();
+        mesh.material.texture = videoTexture;
+      }
+
+      if (config.useVideoTexture && ext) {
+        gl.bindTexture(ext.TEXTURE_VIDEO_IMAGE, mesh.material.texture);
+        // gl.texParameteri(ext.TEXTURE_VIDEO_IMAGE, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        // gl.texParameteri(ext.TEXTURE_VIDEO_IMAGE, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        // gl.texParameteri(ext.TEXTURE_VIDEO_IMAGE, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        // gl.texParameteri(ext.TEXTURE_VIDEO_IMAGE, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        ext.VideoElementTargetVideoTexture(ext.TEXTURE_VIDEO_IMAGE, mesh.material.video);
+      } else {
+        gl.bindTexture(gl.TEXTURE_2D, mesh.material.texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA8,
+          mesh.material.video.videoWidth,
+          mesh.material.video.videoHeight,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          mesh.material.video,
+        );
+      }
+
+      // 09: bind vao
+      gl.bindVertexArray(mesh.vao);
+
+      // 10: draw triangles
+      gl.drawArrays(gl.TRIANGLES, 0, mesh.geometry.count);
+
+      if (ext) {
+        gl.bindTexture(ext.TEXTURE_VIDEO_IMAGE, null);
+      }
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.useProgram(null);
+    }
+
+    // handle resize
+    function resize() {
+      const { clientWidth, clientHeight } = document.documentElement;
+      canvas.width = clientWidth;
+      canvas.height = clientHeight;
+      // handle high DPI screen
+      toHighDPI(canvas);
+      // set viewport
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    }
+
+    window.onresize = resize;
+    resize();
+
+    let lastTime = 0;
+    const fps = 10;
+    const tps = 1000 / fps;
+    let frameTime = 0;
+
+    function render(time) {
+      frameTime += time - lastTime;
+      if (frameTime >= tps) {
+        stats.begin();
+        draw(lastTime);
+        stats.end();
+        frameTime %= tps;
+      }
+      lastTime = time;
+      gl._aniamtionId = requestAnimationFrame(render);
+    }
+
+    gl._aniamtionId = requestAnimationFrame(render);
+
+    // config
+    const gui = new GUI();
+    gui.add(config, 'useVideoTexture').onChange((e) => {
+      gl.deleteTexture(mesh.material.texture);
+      mesh.material.texture = null;
+    });
+  </script>
+</body>
+</html>

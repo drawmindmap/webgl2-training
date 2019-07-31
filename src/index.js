@@ -1,5 +1,7 @@
+export { default as Stats } from 'stats.js';
 export * from 'gl-matrix';
 export * from 'dat.gui';
+
 export * from './Util';
 export * from './Program';
 export * from './Buffer';

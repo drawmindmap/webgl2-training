@@ -19,4 +19,5 @@ export default [
   '18-gouraud-shading.html',
   '19-phong-shading.html',
   '20-two-programs.html',
+  '21-video.html',
 ];
