@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    html, body {
+      margin: 0;
+      overflow: hidden;
+      height: 100%;
+    }
+  </style>
+  <title>WebGL training - Multi draw</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import {
+      vec3,
+      Stats,
+      toHighDPI,
+      createProgram,
+      bindUniformBlock,
+      createBuffer,
+      createVertexArray,
+    } from '../js/bundle.js';
+
+    const mesh = {
+      geometry: {
+        attributes: [
+          {
+            index: 0,
+            size: 2,
+            data: new Float32Array([
+              0.0, 0.0,
+              0.5, 1.0,
+              1.0, 0.0,
+
+              -1.0, 0.0,
+              -0.5, 1.0,
+              0.0, 0.0,
+
+              0.0, -1.0,
+              0.5, 0.0,
+              1.0, -1.0,
+
+              -1.0, -1.0,
+              -0.5, 0.0,
+              0.0, -1.0,
+            ]),
+          },
+        ],
+      },
+      material: {
+      },
+    };
+    const drawCount = 4;
+    const firstsList = new Int32Array(drawCount);
+    const firstsOffset = 0;
+    const countsList = new Int32Array(drawCount);
+    const countsOffset = 0;
+    for (let i = 0; i < drawCount; i += 1) {
+      firstsList[i] = i * 3;
+      countsList[i] = 3;
+    }
+    const stats = new Stats();
+    document.body.appendChild(stats.dom);
+    const canvas = document.getElementById('canvas');
+    // 01: create WebGL context
+    const gl = canvas.getContext('webgl2');
+    const multiDrawExt = gl.getExtension('WEBGL_multi_draw');
+    // 02.1: create program from shader source
+    const program = createProgram(gl, `#version 300 es
+      #extension GL_ANGLE_multi_draw: require
+      precision highp float;
+
+      layout(location = 0) in vec2 a_position;
+      flat out vec4 v_color;
+
+      uniform Model {
+        uniform vec3 u_color[4];
+      };
+
+      void main () {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+        v_color = vec4(u_color[gl_DrawID], 1.0);
+      }
+    `, `#version 300 es
+      precision highp float;
+
+      flat in vec4 v_color;
+      out vec4 fragColor;
+
+      void main () {
+        fragColor = v_color;
+      }
+    `);
+    // 02.2: get uniform block locations
+    bindUniformBlock(gl, program, 'Model', 0);
+    const modelUniformData = new Float32Array(4 * 4);
+    const colors = [
+      vec3.fromValues(1.0, 0.0, 0.0),
+      vec3.fromValues(0.0, 1.0, 0.0),
+      vec3.fromValues(1.0, 1.0, 0.0),
+      vec3.fromValues(0.0, 0.0, 1.0),
+    ];
+    for (let i = 0; i < 4; i += 1) {
+      modelUniformData.set(colors[i], i * 4);
+    }
+    // 03: create uniform buffer
+    const modelUniformBuffer = createBuffer(gl, gl.UNIFORM_BUFFER, modelUniformData, gl.DYNAMIC_DRAW);
+
+    // 04: create vao
+    mesh.vao = createVertexArray(gl, mesh.geometry);
+
+    function draw() {
+      // 05: clean canvas before drawing
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // 06: use program
+      gl.useProgram(program);
+
+      // 07: set model uniform buffer
+      gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, modelUniformBuffer);
+
+      // 08: bind vao
+      gl.bindVertexArray(mesh.vao);
+
+      // 09: draw triangles
+      multiDrawExt.multiDrawArraysWEBGL(
+        gl.TRIANGLES, firstsList, firstsOffset,
+        countsList, countsOffset, drawCount,
+      );
+
+      gl.useProgram(null);
+    }
+
+    // handle resize
+    function resize() {
+      const { clientWidth, clientHeight } = document.documentElement;
+      canvas.width = clientWidth;
+      canvas.height = clientHeight;
+      // handle high DPI screen
+      toHighDPI(canvas);
+      // set viewport
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    }
+
+    window.onresize = resize;
+    resize();
+
+    let lastTime = 0;
+    const fps = 10;
+    const tps = 1000 / fps;
+    let frameTime = 0;
+
+    function render(time) {
+      frameTime += time - lastTime;
+      if (frameTime >= tps) {
+        stats.begin();
+        draw(lastTime);
+        stats.end();
+        frameTime %= tps;
+      }
+      lastTime = time;
+      gl._aniamtionId = requestAnimationFrame(render);
+    }
+
+    gl._aniamtionId = requestAnimationFrame(render);
+  </script>
+</body>
+</html>

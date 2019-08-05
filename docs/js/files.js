@@ -20,4 +20,5 @@ export default [
   '19-phong-shading.html',
   '20-two-programs.html',
   '21-video.html',
+  '22-multi-draw.html',
 ];
